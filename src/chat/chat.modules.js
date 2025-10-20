@@ -9,12 +9,10 @@ class chat_module {
       throw err;
     }
 
-    const conversation = await models.conversations.create({
-      participants: participantIds,
-      isGroup,
-      name,
-    });
-    return conversation.toObject();
+    const conversation = await models.conversations.create({ isGroup, name });
+    const bulk = participantIds.map((userId) => ({ conversationId: conversation.id, userId }));
+    await models.conversationParticipants.bulkCreate(bulk, { ignoreDuplicates: true });
+    return conversation.toJSON();
   }
 
   static async list_conversations(req) {
@@ -22,18 +20,28 @@ class chat_module {
     const rawPage = Number(req.query.page);
     const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? rawLimit : 20;
     const page = Number.isFinite(rawPage) && rawPage > 0 ? rawPage : 0;
+    const offset = page * limit;
 
     const userId = req.query.userId;
-    const query = userId ? { participants: userId } : {};
 
-    const [items, count] = await Promise.all([
-      models.conversations
-        .find(query, { __v: 0 }, { lean: true, sort: { updatedAt: -1 }, skip: page * limit, limit })
-        .populate('participants', '_id name profileImage'),
-      models.conversations.countDocuments(query),
-    ]);
+    const { rows, count } = await models.conversations.findAndCountAll({
+      include: [
+        {
+          model: models.users,
+          as: 'participants',
+          through: { attributes: [] },
+          attributes: ['id', 'name', 'profileImage'],
+          ...(userId ? { where: { id: userId } } : {}),
+        },
+        { model: models.users, as: 'lastMessageUser', attributes: ['id', 'name', 'profileImage'] },
+      ],
+      order: [['updatedAt', 'DESC']],
+      limit,
+      offset,
+      distinct: true,
+    });
 
-    return { items, count, page, limit };
+    return { items: rows, count, page, limit };
   }
 
   static async create_message(req) {
@@ -48,17 +56,15 @@ class chat_module {
 
     const message = await models.messages.create({ conversationId, sender, content, type });
 
-    await models.conversations.findByIdAndUpdate(conversationId, {
-      lastMessage: content,
-      lastMessageBy: sender,
-      lastMessageAt: new Date(),
-    });
+    await models.conversations.update(
+      { lastMessage: content, lastMessageBy: sender, lastMessageAt: new Date() },
+      { where: { id: conversationId } }
+    );
 
-    // Emit event via attached io (if present)
     if (req.app?.get('io')) {
-      req.app.get('io').to(`conv:${conversationId}`).emit('chat:message', message.toObject());
+      req.app.get('io').to(`conv:${conversationId}`).emit('chat:message', message.toJSON());
     }
-    return message.toObject();
+    return message.toJSON();
   }
 
   static async list_messages(req) {
@@ -67,16 +73,18 @@ class chat_module {
     const rawPage = Number(req.query.page);
     const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? rawLimit : 50;
     const page = Number.isFinite(rawPage) && rawPage > 0 ? rawPage : 0;
+    const offset = page * limit;
 
-    const query = { conversationId };
-    const [items, count] = await Promise.all([
-      models.messages
-        .find(query, { __v: 0 }, { lean: true, sort: { createdAt: -1 }, skip: page * limit, limit })
-        .populate('sender', '_id name profileImage'),
-      models.messages.countDocuments(query),
-    ]);
+    const { rows, count } = await models.messages.findAndCountAll({
+      where: { conversationId },
+      include: [{ model: models.users, as: 'senderUser', attributes: ['id', 'name', 'profileImage'] }],
+      order: [['createdAt', 'DESC']],
+      limit,
+      offset,
+      distinct: true,
+    });
 
-    return { items, count, page, limit };
+    return { items: rows, count, page, limit };
   }
 }
 

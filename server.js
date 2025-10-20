@@ -14,6 +14,7 @@ const port = process.env.PORT || 3000;
 require('./src/config/database');
 const user_routes = require('./src/user/users.routes');
 const chat_routes = require('./src/chat/chat.routes');
+const models = require('./src/models');
 
 // Middleware
 app.use(express.urlencoded({ extended: true }));
@@ -60,4 +61,8 @@ io.on('connection', (socket) => {
 
 server.listen(port, () => {
   console.log(`Server running at http://localhost:${port}/`);
+  // Initialize DB schema (safe for dev; for prod, use migrations)
+  models.sequelize.sync({ alter: true })
+    .then(() => console.log('Database synced'))
+    .catch((err) => console.error('Database sync failed:', err));
 });

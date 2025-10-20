@@ -1,15 +1,24 @@
-const mongoose = require('mongoose');
+const { Sequelize } = require('sequelize');
 require('dotenv').config();
 
-const DEFAULT_URI = 'mongodb://127.0.0.1:27017/chatbes_server';
-const MONGODB_URI = process.env.MONGODB_URI || DEFAULT_URI;
+const DEFAULT_URL = 'postgres://postgres:postgres@localhost:5432/chatbes_server';
+const DATABASE_URL = process.env.DATABASE_URL || DEFAULT_URL;
 
-connectToDatabase()
-  .then(() => console.log('DB connected successfully...'))
-  .catch((err) => console.error('MongoDB connection error:', err));
+const sequelize = new Sequelize(DATABASE_URL, {
+  dialect: 'postgres',
+  logging: false,
+});
 
 async function connectToDatabase() {
-  await mongoose.connect(MONGODB_URI);
+  try {
+    await sequelize.authenticate();
+    console.log('DB connected successfully...');
+  } catch (err) {
+    console.error('PostgreSQL connection error:', err);
+    throw err;
+  }
 }
 
-module.exports = mongoose;
+connectToDatabase();
+
+module.exports = { sequelize };
