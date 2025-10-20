@@ -4,14 +4,9 @@ class user_module {
 
     static save_user_details = async (req) => {
         try {
-            console.log("req body", req.body)
-            const { profileImage } = req.body
-            let set_data = req.body
-            if (!!profileImage) {
-                set_data.profileImage = profileImage
-            }
-            return await models.users.create(set_data)
-
+            const payload = req.body;
+            const created = await models.users.create(payload);
+            return created.toJSON();
         } catch (error) {
             throw error
         }
@@ -19,19 +14,20 @@ class user_module {
 
     static reterive_user = async (req) => {
         try {
-            let {limit, pagination} = req.query
+            const rawLimit = Number(req.query.limit);
+            const rawPage = Number(req.query.pagination);
 
-            let query = {}
-            let projection ={__v: 0}
-            let options = {
-                lean: true,
-                sort: {_id: -1},
-                skip: !Number(pagination) ? 0: Number(pagination) * !Number(limit) ? 10: Number(limit),
-                limit: !Number(limit) ? 10: Number(limit)
-            }
-            let users = await models.users.find(query, projection, options)
-            let count = await models.users.count(query)
-            return {users, count}
+            const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? rawLimit : 10;
+            const page = Number.isFinite(rawPage) && rawPage > 0 ? rawPage : 0; // zero-based page
+
+            const offset = page * limit;
+            const { rows, count } = await models.users.findAndCountAll({
+                order: [['id', 'DESC']],
+                limit,
+                offset,
+                attributes: { exclude: [] },
+            });
+            return { users: rows, count, page, limit };
         } catch (error) {
             throw error
         }
@@ -39,15 +35,13 @@ class user_module {
 
     static verify_user = async (req) => {
         try {
-            console.log("req body", req.body)
             const { otp, user_id } = req.body
-            if(otp == '123456'){
-                let user = await models.users.findById(user_id)
-                return {user: user, status: true, message: 'success'}
-            }else{
-                return {user: null, status: false, message: 'Otp Invalid'}
+            if (otp === '123456') {
+                const user = await models.users.findByPk(user_id)
+                return { user, status: true, message: 'success' }
+            } else {
+                return { user: null, status: false, message: 'Otp Invalid' }
             }
-
         } catch (error) {
             throw error
         }
