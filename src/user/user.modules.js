@@ -19,19 +19,26 @@ class user_module {
 
     static reterive_user = async (req) => {
         try {
-            let {limit, pagination} = req.query
+            const rawLimit = Number(req.query.limit);
+            const rawPage = Number(req.query.pagination);
 
-            let query = {}
-            let projection ={__v: 0}
-            let options = {
+            const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? rawLimit : 10;
+            const page = Number.isFinite(rawPage) && rawPage > 0 ? rawPage : 0; // zero-based page
+
+            const query = {};
+            const projection = { __v: 0 };
+            const options = {
                 lean: true,
-                sort: {_id: -1},
-                skip: !Number(pagination) ? 0: Number(pagination) * !Number(limit) ? 10: Number(limit),
-                limit: !Number(limit) ? 10: Number(limit)
-            }
-            let users = await models.users.find(query, projection, options)
-            let count = await models.users.count(query)
-            return {users, count}
+                sort: { _id: -1 },
+                skip: page * limit,
+                limit,
+            };
+
+            const [users, count] = await Promise.all([
+                models.users.find(query, projection, options),
+                models.users.countDocuments(query),
+            ]);
+            return { users, count, page, limit };
         } catch (error) {
             throw error
         }

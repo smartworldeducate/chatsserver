@@ -1,8 +1,15 @@
 const mongoose = require('mongoose');
+require('dotenv').config();
 
-main().then(() => console.log("DB connected successfully...!!!"))
-     .catch(err => console.log(err));
+const DEFAULT_URI = 'mongodb://127.0.0.1:27017/chatbes_server';
+const MONGODB_URI = process.env.MONGODB_URI || DEFAULT_URI;
 
-async function main() {
-  await mongoose.connect('mongodb+srv://salmanali:salman303@cluster0.7b7f2ni.mongodb.net/chatbes_server');
+connectToDatabase()
+  .then(() => console.log('DB connected successfully...'))
+  .catch((err) => console.error('MongoDB connection error:', err));
+
+async function connectToDatabase() {
+  await mongoose.connect(MONGODB_URI);
 }
+
+module.exports = mongoose;
